@@ -2,10 +2,11 @@
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 function RegisterForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -68,19 +69,9 @@ function RegisterForm() {
         return;
       }
 
-      setMessage(
-        `Inscription réussie ! Votre code de parrainage est ${data.user.referralCode}.`
-      );
-
-      setName("");
-      setPhone("");
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
-
-      if (!referralFromUrl) {
-        setReferralCode("");
-      }
+      // Inscription réussie :
+      // redirection automatique vers la page d'activation.
+      router.push("/activation");
     } catch {
       setError(
         "Impossible de contacter le serveur. Veuillez réessayer."
