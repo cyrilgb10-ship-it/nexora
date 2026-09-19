@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ActivationStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+enum TransactionType {
+  ACTIVATION
+  REFERRAL_REWARD
+  MISSION_REWARD
+  WITHDRAWAL
+  WITHDRAWAL_REFUND
+}
+
+enum WithdrawalMethod {
+  TMONEY
+  FLOOZ
+  MTN_MOBILE_MONEY
+  WAVE
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id               String           @id @default(cuid())
+  name             String
+  phone            String           @unique
+  email            String           @unique
+  password         String
+  referralCode     String           @unique
+  referredById     String?
+  role             UserRole         @default(USER)
+  activationStatus ActivationStatus @default(PENDING)
+  balance          Int              @default(0)
+  lockedBalance    Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  referredBy User?  @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals  User[] @relation("UserReferrals")
+
+  transactions       Transaction[]
+  withdrawals        Withdrawal[]
+  missionCompletions MissionCompletion[]
+
+  @@index([referredById])
+  @@index([activationStatus])
+  @@index([role])
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  userId      String
+  type        TransactionType
+  amount      Int
+  description String
+  createdAt   DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Withdrawal {
+  id          String           @id @default(cuid())
+  userId      String
+  amount      Int
+  method      WithdrawalMethod
+  phone       String
+  status      WithdrawalStatus @default(PENDING)
+  adminNote   String?
+  processedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Mission {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  target      Int
+  reward      Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  completions MissionCompletion[]
+
+  @@unique([target])
+}
+
+model MissionCompletion {
+  id             String   @id @default(cuid())
+  userId         String
+  missionId      String
+  rewardCredited Boolean  @default(false)
+  completedAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, missionId])
+  @@index([userId])
+  @@index([missionId])
+}
