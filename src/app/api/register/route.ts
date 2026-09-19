@@ -157,7 +157,8 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(
+    // Créer la réponse de succès
+    const response = NextResponse.json(
       {
         success: true,
         message: "Inscription réussie.",
@@ -165,6 +166,18 @@ export async function POST(request: Request) {
       },
       { status: 201 }
     );
+
+    // Mémoriser immédiatement le nouvel utilisateur.
+    // Cela permet à /activation de récupérer le bon compte.
+    response.cookies.set("nexora_user_id", user.id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    return response;
   } catch (error) {
     console.error("REGISTER_ERROR:", error);
 
