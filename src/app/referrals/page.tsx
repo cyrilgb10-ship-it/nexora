@@ -76,7 +76,7 @@ export default async function ReferralsPage() {
     0
   );
 
-  const referralLink = `/register?ref=${user.referralCode}`;
+  const referralLink = `https://nexoraearning.netlify.app/register?ref=${user.referralCode}`;
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-white">
