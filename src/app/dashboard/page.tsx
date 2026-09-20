@@ -1,7 +1,7 @@
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import MobileMenu from "@/components/MobileMenu";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -12,25 +12,14 @@ export default async function DashboardPage() {
   }
 
   const user = await prisma.user.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      id: true,
-      name: true,
-      phone: true,
-      email: true,
-      referralCode: true,
-      activationStatus: true,
-      balance: true,
-      lockedBalance: true,
-      createdAt: true,
-      _count: {
+    where: { id: userId },
+    include: {
+      referrals: {
+        where: {
+          activationStatus: "ACTIVE",
+        },
         select: {
-          referrals: true,
-          transactions: true,
-          withdrawals: true,
-          missionCompletions: true,
+          id: true,
         },
       },
     },
@@ -44,424 +33,421 @@ export default async function DashboardPage() {
     redirect("/activation");
   }
 
-  const referralLink = `/register?ref=${user.referralCode}`;
+  const referralCount = user.referrals.length;
+
+  const recentTransactions = await prisma.transaction.findMany({
+    where: {
+      userId: user.id,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 5,
+  });
+
+  const transactionLabels: Record<string, string> = {
+    ACTIVATION: "Activation du compte",
+    REFERRAL_REWARD: "Récompense de parrainage",
+    MISSION_REWARD: "Récompense de mission",
+    DAILY_TASK_REWARD: "Récompense tâche quotidienne",
+    WITHDRAWAL: "Retrait",
+    WITHDRAWAL_REFUND: "Remboursement du retrait",
+  };
+
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-white sm:px-6 sm:py-8">
-      <div className="mx-auto max-w-6xl">
+    <main className="min-h-screen bg-slate-950 text-white">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* HEADER */}
-        <header className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-bold uppercase tracking-widest text-cyan-400">
-              NEXORA
+        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-cyan-400">
+              Bienvenue sur Nexora
             </p>
 
-            <h1 className="mt-1 truncate text-2xl font-black sm:text-3xl">
-              Bonjour {user.name} 👋
+            <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
+              Bonjour, {user.name} 👋
             </h1>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Bienvenue dans votre espace personnel.
+            <p className="mt-1 text-sm text-slate-400">
+              Gérez vos missions, tâches quotidiennes et gains depuis votre
+              tableau de bord.
             </p>
           </div>
 
-          <MobileMenu />
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-400">
+              Compte actif
+            </span>
+
+            <Link
+              href="/api/logout"
+              className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-red-500/40 hover:text-red-400"
+            >
+              Déconnexion
+            </Link>
+          </div>
         </header>
 
-        {/* STATUT */}
-        <section className="mt-6 rounded-2xl border border-green-500/20 bg-green-500/5 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-green-400">
-                ✓ Compte actif
-              </p>
+        {/* SOLDES PRINCIPAUX */}
+        <section className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/15 to-slate-900 p-6 shadow-xl">
+            <p className="text-sm text-slate-400">Solde disponible</p>
 
-              <p className="mt-1 text-xs text-slate-500">
-                Votre compte Nexora est actuellement actif.
-              </p>
-            </div>
+            <p className="mt-2 text-3xl font-bold text-cyan-300">
+              {user.balance.toLocaleString("fr-FR")} FCFA
+            </p>
 
-            <span className="rounded-full bg-green-500/10 px-3 py-1 text-xs font-bold text-green-400">
-              ACTIVE
-            </span>
+            <p className="mt-2 text-xs text-slate-400">
+              Solde général disponible pour les opérations classiques.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-amber-500/20 bg-slate-900 p-6 shadow-xl">
+            <p className="text-sm text-slate-400">Solde en traitement</p>
+
+            <p className="mt-2 text-3xl font-bold text-amber-300">
+              {user.lockedBalance.toLocaleString("fr-FR")} FCFA
+            </p>
+
+            <p className="mt-2 text-xs text-slate-400">
+              Montant actuellement associé aux retraits en attente.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-purple-500/20 bg-slate-900 p-6 shadow-xl">
+            <p className="text-sm text-slate-400">Filleuls actifs</p>
+
+            <p className="mt-2 text-3xl font-bold text-purple-300">
+              {referralCount}
+            </p>
+
+            <p className="mt-2 text-xs text-slate-400">
+              Utilisateurs actifs parrainés par votre compte.
+            </p>
           </div>
         </section>
 
-        {/* SOLDE */}
-        <section className="mt-6 grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-cyan-500/20 bg-slate-900 p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-slate-400">
-                  Solde disponible
-                </p>
+        {/* ACTIONS PRINCIPALES */}
+        <section className="mt-8">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold">Gagner de l'argent</h2>
 
-                <p className="mt-2 text-4xl font-black text-cyan-400 sm:text-5xl">
-                  {user.balance.toLocaleString("fr-FR")} FCFA
-                </p>
+            <p className="mt-1 text-sm text-slate-400">
+              Choisissez une activité disponible sur votre compte.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* TÂCHES QUOTIDIENNES */}
+            <Link
+              href="/tasks"
+              className="group rounded-2xl border border-cyan-500/20 bg-slate-900 p-5 transition hover:-translate-y-1 hover:border-cyan-400/50 hover:bg-slate-800"
+            >
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-2xl">
+                🎯
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-2xl">
+              <h3 className="font-bold text-white group-hover:text-cyan-300">
+                Tâches quotidiennes
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Effectuez la tâche du jour et gagnez votre récompense.
+              </p>
+
+              <div className="mt-4 text-sm font-semibold text-cyan-400">
+                Voir la tâche →
+              </div>
+            </Link>
+
+            {/* MISSIONS */}
+            <Link
+              href="/missions"
+              className="group rounded-2xl border border-purple-500/20 bg-slate-900 p-5 transition hover:-translate-y-1 hover:border-purple-400/50 hover:bg-slate-800"
+            >
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/10 text-2xl">
+                🏆
+              </div>
+
+              <h3 className="font-bold text-white group-hover:text-purple-300">
+                Missions
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Accomplissez vos missions de parrainage et réclamez vos
+                récompenses.
+              </p>
+
+              <div className="mt-4 text-sm font-semibold text-purple-400">
+                Voir les missions →
+              </div>
+            </Link>
+
+            {/* PARRAINAGE */}
+            <Link
+              href="/referrals"
+              className="group rounded-2xl border border-emerald-500/20 bg-slate-900 p-5 transition hover:-translate-y-1 hover:border-emerald-400/50 hover:bg-slate-800"
+            >
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-2xl">
+                👥
+              </div>
+
+              <h3 className="font-bold text-white group-hover:text-emerald-300">
+                Parrainage
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Invitez de nouveaux utilisateurs et développez votre réseau.
+              </p>
+
+              <div className="mt-4 text-sm font-semibold text-emerald-400">
+                Mon parrainage →
+              </div>
+            </Link>
+
+            {/* RETRAIT CLASSIQUE */}
+            <Link
+              href="/withdrawal"
+              className="group rounded-2xl border border-amber-500/20 bg-slate-900 p-5 transition hover:-translate-y-1 hover:border-amber-400/50 hover:bg-slate-800"
+            >
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-2xl">
                 💰
               </div>
-            </div>
 
-            <a
-              href="/withdrawal"
-              className="mt-6 flex w-full items-center justify-center rounded-xl bg-cyan-500 px-5 py-3 font-black text-slate-950 transition hover:bg-cyan-400"
+              <h3 className="font-bold text-white group-hover:text-amber-300">
+                Retirer mes gains
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Demandez un retrait de votre solde général disponible.
+              </p>
+
+              <div className="mt-4 text-sm font-semibold text-amber-400">
+                Effectuer un retrait →
+              </div>
+            </Link>
+
+            {/* RETRAIT DES TÂCHES */}
+            <Link
+              href="/task-withdrawal"
+              className="group rounded-2xl border border-blue-500/20 bg-slate-900 p-5 transition hover:-translate-y-1 hover:border-blue-400/50 hover:bg-slate-800"
             >
-              💸 Retirer mes gains
-            </a>
-          </div>
-
-          <div className="rounded-2xl border border-yellow-500/20 bg-slate-900 p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-slate-400">
-                  Solde bloqué
-                </p>
-
-                <p className="mt-2 text-4xl font-black text-yellow-400 sm:text-5xl">
-                  {user.lockedBalance.toLocaleString("fr-FR")} FCFA
-                </p>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-2xl">
+                🏦
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-500/10 text-2xl">
-                ⏳
-              </div>
-            </div>
+              <h3 className="font-bold text-white group-hover:text-blue-300">
+                Gains des tâches
+              </h3>
 
-            <p className="mt-6 text-sm leading-6 text-slate-500">
-              Montant temporairement bloqué pendant le traitement de vos
-              demandes de retrait.
-            </p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                Consultez le solde de chaque tâche et demandez un retrait
+                séparément.
+              </p>
+
+              <div className="mt-4 text-sm font-semibold text-blue-400">
+                Retirer mes gains →
+              </div>
+            </Link>
           </div>
         </section>
 
-        {/* ACTIONS RAPIDES */}
-        <section className="mt-6">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold">Accès rapides</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Accédez rapidement aux principales fonctionnalités.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <a
-              href="/referrals"
-              className="group rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/50 hover:bg-slate-900/80"
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-2xl">
-                  👥
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-white group-hover:text-cyan-400">
-                    Parrainage
-                  </h3>
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    Inviter et suivre vos filleuls
-                  </p>
-                </div>
-              </div>
-            </a>
-
-            <a
-              href="/missions"
-              className="group rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/50 hover:bg-slate-900/80"
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/10 text-2xl">
-                  🎯
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-white group-hover:text-cyan-400">
-                    Missions
-                  </h3>
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    Consultez vos missions disponibles
-                  </p>
-                </div>
-              </div>
-            </a>
-
-            <a
+        {/* NAVIGATION */}
+        <section className="mt-8">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {/* TRANSACTIONS */}
+            <Link
               href="/transactions"
-              className="group rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/50 hover:bg-slate-900/80"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/30"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/10 text-2xl">
-                  💳
-                </div>
+              <div className="text-2xl">📊</div>
 
-                <div>
-                  <h3 className="font-bold text-white group-hover:text-cyan-400">
-                    Transactions
-                  </h3>
+              <h3 className="mt-3 font-bold">Transactions</h3>
 
-                  <p className="mt-1 text-xs text-slate-500">
-                    Consultez votre historique financier
-                  </p>
-                </div>
-              </div>
-            </a>
+              <p className="mt-1 text-sm text-slate-400">
+                Consultez l'historique de vos opérations.
+              </p>
+            </Link>
 
-            <a
-              href="/withdrawal"
-              className="group rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/50 hover:bg-slate-900/80"
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-500/10 text-2xl">
-                  💸
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-white group-hover:text-cyan-400">
-                    Faire un retrait
-                  </h3>
-
-                  <p className="mt-1 text-xs text-slate-500">
-                    Demander le retrait de vos gains
-                  </p>
-                </div>
-              </div>
-            </a>
-
-            <a
+            {/* HISTORIQUE RETRAITS */}
+            <Link
               href="/withdrawal-history"
-              className="group rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/50 hover:bg-slate-900/80"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-amber-500/30"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-500/10 text-2xl">
-                  📋
-                </div>
+              <div className="text-2xl">📋</div>
 
-                <div>
-                  <h3 className="font-bold text-white group-hover:text-cyan-400">
-                    Historique des retraits
-                  </h3>
+              <h3 className="mt-3 font-bold">Historique des retraits</h3>
 
-                  <p className="mt-1 text-xs text-slate-500">
-                    Suivre vos demandes de retrait
-                  </p>
-                </div>
-              </div>
-            </a>
+              <p className="mt-1 text-sm text-slate-400">
+                Consultez vos demandes de retrait classiques.
+              </p>
+            </Link>
 
-            <a
-              href="/dashboard"
-              className="group rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/50 hover:bg-slate-900/80"
+            {/* GAINS DES TÂCHES */}
+            <Link
+              href="/task-withdrawal"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-blue-500/30"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-800 text-2xl">
-                  🏠
-                </div>
+              <div className="text-2xl">🏦</div>
 
-                <div>
-                  <h3 className="font-bold text-white group-hover:text-cyan-400">
-                    Mon dashboard
-                  </h3>
+              <h3 className="mt-3 font-bold">Gains des tâches</h3>
 
-                  <p className="mt-1 text-xs text-slate-500">
-                    Vue générale de votre compte
-                  </p>
-                </div>
-              </div>
-            </a>
-          </div>
-        </section>
-
-        {/* PARRAINAGE */}
-        <section className="mt-6 rounded-2xl border border-cyan-500/20 bg-slate-900 p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-cyan-400">
-                PROGRAMME DE PARRAINAGE
+              <p className="mt-1 text-sm text-slate-400">
+                Consultez vos soldes par tâche et effectuez vos retraits.
               </p>
+            </Link>
 
-              <h2 className="mt-1 text-2xl font-black">
-                Invitez vos proches
-              </h2>
-
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                Partagez votre code de parrainage et suivez vos filleuls
-                directement depuis votre espace.
-              </p>
-            </div>
-
-            <a
+            {/* PARRAINAGE */}
+            <Link
               href="/referrals"
-              className="inline-flex items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-3 font-bold text-cyan-400 transition hover:bg-cyan-500/20"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-emerald-500/30"
             >
-              Voir mon parrainage →
-            </a>
-          </div>
+              <div className="text-2xl">🔗</div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Votre code
-              </p>
+              <h3 className="mt-3 font-bold">Mon lien de parrainage</h3>
 
-              <p className="mt-2 break-all text-xl font-black text-white">
-                {user.referralCode}
+              <p className="mt-1 text-sm text-slate-400">
+                Partagez votre lien et suivez vos filleuls.
               </p>
-            </div>
+            </Link>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Votre lien
-              </p>
+            {/* TÂCHE DU JOUR */}
+            <Link
+              href="/tasks"
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5 transition hover:border-cyan-500/30"
+            >
+              <div className="text-2xl">📅</div>
 
-              <p className="mt-2 break-all text-sm font-semibold text-cyan-400">
-                {referralLink}
+              <h3 className="mt-3 font-bold">Tâche du jour</h3>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Revenez chaque jour pour effectuer la tâche disponible.
               </p>
-            </div>
+            </Link>
           </div>
         </section>
 
-        {/* STATISTIQUES */}
-        <section className="mt-6">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold">
-              Statistiques de votre compte
-            </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Résumé de votre activité sur Nexora.
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-              <p className="text-sm text-slate-400">
-                Filleuls
-              </p>
-
-              <p className="mt-2 text-3xl font-black text-cyan-400">
-                {user._count.referrals}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-              <p className="text-sm text-slate-400">
-                Transactions
-              </p>
-
-              <p className="mt-2 text-3xl font-black text-white">
-                {user._count.transactions}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-              <p className="text-sm text-slate-400">
-                Retraits
-              </p>
-
-              <p className="mt-2 text-3xl font-black text-yellow-400">
-                {user._count.withdrawals}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-              <p className="text-sm text-slate-400">
-                Missions terminées
-              </p>
-
-              <p className="mt-2 text-3xl font-black text-green-400">
-                {user._count.missionCompletions}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* INFORMATIONS DU COMPTE */}
-        <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900 p-6">
-          <div className="flex items-center justify-between gap-4">
+        {/* TRANSACTIONS RÉCENTES */}
+        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold">
-                Informations du compte
-              </h2>
+              <h2 className="text-xl font-bold">Activité récente</h2>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Vos informations personnelles.
+              <p className="mt-1 text-sm text-slate-400">
+                Vos cinq dernières opérations.
               </p>
             </div>
 
-            <span className="rounded-full bg-green-500/10 px-3 py-1 text-xs font-bold text-green-400">
-              Actif
-            </span>
+            <Link
+              href="/transactions"
+              className="text-sm font-semibold text-cyan-400 hover:text-cyan-300"
+            >
+              Tout voir →
+            </Link>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Nom
-              </p>
+          <div className="mt-5 overflow-hidden rounded-xl border border-slate-800">
+            {recentTransactions.length === 0 ? (
+              <div className="p-6 text-center text-sm text-slate-400">
+                Aucune transaction pour le moment.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-800">
+                {recentTransactions.map((transaction) => {
+                  const isPositive =
+                    transaction.type === "ACTIVATION" ||
+                    transaction.type === "REFERRAL_REWARD" ||
+                    transaction.type === "MISSION_REWARD" ||
+                    transaction.type === "DAILY_TASK_REWARD" ||
+                    transaction.type === "WITHDRAWAL_REFUND";
 
-              <p className="mt-2 font-semibold text-white">
+                  return (
+                    <div
+                      key={transaction.id}
+                      className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="font-medium text-white">
+                          {transactionLabels[transaction.type] ??
+                            transaction.description}
+                        </p>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          {formatDate(transaction.createdAt)}
+                        </p>
+                      </div>
+
+                      <div
+                        className={`text-sm font-bold ${
+                          isPositive
+                            ? "text-emerald-400"
+                            : "text-red-400"
+                        }`}
+                      >
+                        {isPositive ? "+" : "-"}
+                        {transaction.amount.toLocaleString("fr-FR")} FCFA
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* INFORMATIONS */}
+        <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-6">
+          <h2 className="text-lg font-bold">Informations</h2>
+
+          <div className="mt-4 grid gap-3 text-sm text-slate-400 sm:grid-cols-2">
+            <div className="rounded-xl bg-slate-950 p-4">
+              <span className="text-slate-500">Nom</span>
+
+              <p className="mt-1 font-medium text-white">
                 {user.name}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Téléphone
-              </p>
+            <div className="rounded-xl bg-slate-950 p-4">
+              <span className="text-slate-500">Téléphone</span>
 
-              <p className="mt-2 font-semibold text-white">
+              <p className="mt-1 font-medium text-white">
                 {user.phone}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Email
-              </p>
+            <div className="rounded-xl bg-slate-950 p-4">
+              <span className="text-slate-500">Email</span>
 
-              <p className="mt-2 break-all font-semibold text-white">
+              <p className="mt-1 break-all font-medium text-white">
                 {user.email}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Membre depuis
-              </p>
+            <div className="rounded-xl bg-slate-950 p-4">
+              <span className="text-slate-500">
+                Code de parrainage
+              </span>
 
-              <p className="mt-2 font-semibold text-white">
-                {new Date(user.createdAt).toLocaleDateString(
-                  "fr-FR",
-                  {
-                    day: "2-digit",
-                    month: "long",
-                    year: "numeric",
-                  }
-                )}
+              <p className="mt-1 font-medium text-cyan-300">
+                {user.referralCode}
               </p>
             </div>
           </div>
         </section>
 
-        {/* DECONNEXION */}
-        <section className="mt-6">
-          <form action="/api/logout" method="POST">
-            <button
-              type="submit"
-              className="w-full rounded-xl border border-red-500/20 bg-red-500/5 px-5 py-3.5 font-bold text-red-400 transition hover:bg-red-500/10"
-            >
-              🚪 Se déconnecter
-            </button>
-          </form>
-        </section>
-
-        <footer className="mt-8 pb-4 text-center text-xs text-slate-600">
-          © {new Date().getFullYear()} Nexora. Tous droits réservés.
+        <footer className="mt-10 pb-6 text-center text-xs text-slate-600">
+          Nexora © {new Date().getFullYear()} — Tous droits réservés.
         </footer>
       </div>
     </main>

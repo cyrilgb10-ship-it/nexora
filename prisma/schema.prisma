@@ -22,6 +22,7 @@ enum TransactionType {
   ACTIVATION
   REFERRAL_REWARD
   MISSION_REWARD
+  DAILY_TASK_REWARD
   WITHDRAWAL
   WITHDRAWAL_REFUND
 }
@@ -49,17 +50,26 @@ model User {
   referredById     String?
   role             UserRole         @default(USER)
   activationStatus ActivationStatus @default(PENDING)
-  balance          Int              @default(0)
-  lockedBalance    Int              @default(0)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+
+  // Solde général : parrainage, missions, etc.
+  balance Int @default(0)
+
+  // Montants bloqués pendant les retraits classiques
+  lockedBalance Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   referredBy User?  @relation("UserReferrals", fields: [referredById], references: [id])
   referrals  User[] @relation("UserReferrals")
 
-  transactions       Transaction[]
-  withdrawals        Withdrawal[]
-  missionCompletions MissionCompletion[]
+  transactions         Transaction[]
+  withdrawals          Withdrawal[]
+  missionCompletions   MissionCompletion[]
+  dailyTaskCompletions DailyTaskCompletion[]
+  dailyTaskAttempts    DailyTaskAttempt[]
+  dailyTaskBalances    DailyTaskBalance[]
+  dailyTaskWithdrawals DailyTaskWithdrawal[]
 
   @@index([referredById])
   @@index([activationStatus])
@@ -128,4 +138,95 @@ model MissionCompletion {
   @@unique([userId, missionId])
   @@index([userId])
   @@index([missionId])
+}
+
+model DailyTask {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  dayOfWeek   Int
+  reward      Int      @default(100)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  completions DailyTaskCompletion[]
+  attempts    DailyTaskAttempt[]
+  balances    DailyTaskBalance[]
+  withdrawals DailyTaskWithdrawal[]
+
+  @@unique([dayOfWeek])
+  @@index([isActive])
+}
+
+model DailyTaskCompletion {
+  id             String   @id @default(cuid())
+  userId         String
+  taskId         String
+  completionDate String
+  rewardCredited Boolean  @default(true)
+  completedAt    DateTime @default(now())
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task DailyTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId, completionDate])
+  @@index([userId])
+  @@index([taskId])
+  @@index([completionDate])
+}
+
+model DailyTaskAttempt {
+  id        String   @id @default(cuid())
+  userId    String
+  taskId    String
+  taskDate  String
+  startedAt DateTime
+  createdAt DateTime @default(now())
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task DailyTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId, taskDate])
+  @@index([userId])
+  @@index([taskId])
+  @@index([taskDate])
+}
+
+model DailyTaskBalance {
+  id        String   @id @default(cuid())
+  userId    String
+  taskId    String
+  balance   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task DailyTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId])
+  @@index([userId])
+  @@index([taskId])
+}
+
+model DailyTaskWithdrawal {
+  id          String    @id @default(cuid())
+  userId      String
+  taskId      String
+  amount      Int
+  method      String
+  phone       String
+  status      String    @default("PENDING")
+  adminNote   String?
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task DailyTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([status])
+  @@index([createdAt])
 }
