@@ -70,6 +70,7 @@ model User {
   dailyTaskAttempts    DailyTaskAttempt[]
   dailyTaskBalances    DailyTaskBalance[]
   dailyTaskWithdrawals DailyTaskWithdrawal[]
+  payments             Payment[]
 
   @@index([referredById])
   @@index([activationStatus])
@@ -227,6 +228,26 @@ model DailyTaskWithdrawal {
 
   @@index([userId])
   @@index([taskId])
+  @@index([status])
+  @@index([createdAt])
+}
+model Payment {
+  id                String   @id @default(cuid())
+  userId            String
+  identifier        String   @unique
+  txReference       String?  @unique
+  paymentReference  String?
+  amount            Int
+  status            String   @default("PENDING")
+  paymentMethod     String?
+  phoneNumber       String?
+  paidAt            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@index([status])
   @@index([createdAt])
 }
